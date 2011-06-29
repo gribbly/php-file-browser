@@ -1,14 +1,21 @@
 <?php
-    /*    browser V3 (2010, brian lai)
-          This script cannot edit itself.
+    /*  Browser V4.00 (2011, Brian Lai)
+        This script cannot edit itself.
     */
-    define ("THINC_BROWSER_VERSION", 3.10);
-    
     // settings
+    define ("THINC_BROWSER_VERSION", 4.00);
+        
+    // make the interface change colour.
+    $hostname = gethostbyaddr($_SERVER['REMOTE_ADDR']);
+    $hex = dechex (intval (ord (substr ($hostname, 0, 1))/10)*11) . 
+           dechex (intval (ord (substr ($hostname, 1, 1))/10)*11) . 
+           dechex (intval (ord (substr ($hostname, 2, 1))/10)*11);
+    define ("HEADER_COLOR", "#$hex"); // any html colour will do
     define ("BACKUP_BEFORE_SAVING", true);
     define ("SHOW_HIDDEN_OBJECTS", true); //only checks if objects' names begin with '.'
     define ("SHOW_BACKUP_OBJECTS", false); //remove .b??????.bak files from the list
-    
+    define ("CHECK_PASSWORD", false); //show login window if...
+     
     // vars
     $a = isset ($_GET['act']) ? $_GET['act']  : @$_POST['act'];
     $c = isset ($_GET['cwd']) ? $_GET['cwd']  :(isset ($_POST['cwd']) ? $_POST['cwd'] : getcwd());
@@ -16,9 +23,34 @@
     $f = isset ($_GET['file'])? $_GET['file'] : @$_POST['file'];
     $p1= isset ($_GET['p1'])  ? $_GET['p1']   : @$_POST['p1']; // params for $a
     $p2= isset ($_GET['p2'])  ? $_GET['p2']   : @$_POST['p2'];
+    $un= isset ($_POST['username']) ? $_POST['username'] : @$_GET['username'];
+    $pw= isset ($_POST['password']) ? $_POST['password'] : @$_GET['password'];
+    
+    // add user / sha1(pass) combinations here.
+    if (CHECK_PASSWORD) {
+        $allowed_users = array ('brian'=>'526242588032599f491f36c10137c88c076384ef');
+        if (strlen ($un) > 0) { // login request
+            if (array_key_exists ($un, $allowed_users) && 
+               (sha1 ($pw) == $allowed_users[$un])) { // basically, password check
+                setcookie ("username", $un, time() + 36000);
+                setcookie ("password", $pw, time() + 36000);
+            } else {
+                $m = 8; // wrong password, switch to mode 8 (login window)
+            }
+        } else {
+            if (isset ($_COOKIE["username"]) && isset ($_COOKIE["password"]) && 
+                array_key_exists ($_COOKIE["username"], $allowed_users) && 
+                $allowed_users[$_COOKIE["username"]] == sha1 ($_COOKIE["password"])) {
+                // do nothing. user is authenticated.
+            } else {
+                // user not logged in or password is wrong
+                $m = 8; // switch to mode 8 (login window)
+            }    
+        }
+    }
 
     chdir ($c); // because
-    
+        
     function filelist($base,$what=2) {
         /*  what
             0 = dirs only
@@ -99,6 +131,8 @@
         5   actions: group actions  -
         6   current dir, download   -
         7   current dir, upload     tree
+        8   login window (set cookies)
+        9   ajax file transfer (accepts $_POST)
         99    debug
     */
     if ($m==0 || 
@@ -124,36 +158,80 @@
                     .header {
                         margin:0 0 5px 0;
                         padding:5px;
-                        background-color:maroon;
+                        background-color:<?php echo (HEADER_COLOR); ?>;
                         color:white;
                         vertical-align:top;
                         text-align:center; }
                 </style>
-                <script type='text/javascript' src='http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
-                <script type="text/javascript" src="http://thinc.netfirms.com/edit_area/edit_area_full.js"></script>
-                <script type="text/javascript">
-                    function rot13(s) {
-                        return s.replace(/[a-zA-Z]/g,function(c){
-                        return String.fromCharCode((c<="Z"?90:122)>=(c=c.charCodeAt(0)+13)?c:c-26);})
+                <!--script type='text/javascript' src='http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script-->
+                <script type='text/javascript' src='http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js'></script>
+                <script type='text/javascript' src="http://thinc.netfirms.com/edit_area/edit_area_full.js"></script>
+                <script type='text/javascript'>
+
+                    function my_save (id) {
+                        // alert("Here is the content of the EditArea '"+ id +"' as received by the save callback function:\n"+content);
+                        // document.getElementById('save').click();
+                        $(document).ready (function () {
+                            $.ajax({
+                                type: 'POST',
+                                url: '<?php echo (basename (__FILE__)); ?>',
+                                data: {
+                                    mode: '9',
+                                    file: '<?php echo ($f); ?>',
+                                    cwd:  '<?php echo ($c); ?>',
+                                    p: editAreaLoader.getValue(id)
+                                },
+                                success: function (data) {
+                                    alert (data);
+                                },
+                                error: function (data) {
+                                    document.getElementById('save').click(); // non-ajax
+                                },
+                                dataType: 'html'
+                            });
+                        });
                     }
 
-                    editAreaLoader.init({
-                        id: "p" // id of the textarea to transform      
-                        ,start_highlight: true  // if start with highlight
-                        ,allow_toggle: false
-                        ,word_wrap: false
-                        ,syntax: "php"
-                        ,replace_tab_by_spaces:4
-                        ,toolbar: "save,undo,redo,search,reset_highlight,word_wrap,fullscreen,select_font,syntax_selection"
-                        ,font_family: "consolas, monospace"
-                        ,font_size: "9"
-                        ,save_callback: "my_save"
-                    });
-                    
-                    function my_save (id, content) {
+                    function my_save_2 (id, content) {
                         // alert("Here is the content of the EditArea '"+ id +"' as received by the save callback function:\n"+content);
                         document.getElementById('save').click();
+                        /*$(document).ready (function () {
+                            $.ajax({
+                                type: 'POST',
+                                url: '<?php echo (basename (__FILE__)); ?>',
+                                data: {
+                                    mode: '9',
+                                    file: '<?php echo ($f); ?>',
+                                    cwd:  '<?php echo ($c); ?>',
+                                    p: content
+                                },
+                                success: function (data) {
+                                    alert (data);
+                                },
+                                dataType: 'html'
+                            });
+                        });*/
                     }
+
+                    $(document).ready (function () {
+                        function rot13(s) {
+                            return s.replace(/[a-zA-Z]/g,function(c){
+                            return String.fromCharCode((c<="Z"?90:122)>=(c=c.charCodeAt(0)+13)?c:c-26);})
+                        }
+                        editAreaLoader.init({
+                            id: "p" // id of the textarea to transform      
+                            ,start_highlight: true  // if start with highlight
+                            ,allow_toggle: false
+                            ,word_wrap: false
+                            ,syntax: "php"
+                            ,replace_tab_by_spaces:4
+                            ,toolbar: "save,undo,redo,search,reset_highlight,word_wrap,fullscreen,select_font,syntax_selection"
+                            ,font_family: "monaco, consolas, monospace"
+                            ,font_size: "9"
+                            // ,load_callback: "my_save_2"
+                            ,save_callback: "my_save"
+                        });                    
+                    });
                 </script>
             </head>
 <?php
@@ -164,10 +242,10 @@
         <frameset cols="300px,*">
             <frame name="tree" src="?mode=1" />
             <frame name="editor" src="?mode=2" />
-        </frameset>
+        </frameset><noframes></noframes>
 <?php
     break; case 1:
-        // tree
+        // tree 
         echo("<body>
                 <p class='header'>
                     <a href='?cwd=" . dirname ($c) . "&amp;mode=1' target='tree'>
@@ -193,7 +271,7 @@
             
             $pp = fileicon ($pn);
 
-            printf ("    <tr %s>
+            @printf ("    <tr %s>
                             <td>
                                 <input type='checkbox' name='c$i' value='1' />
                                 <input type='hidden' name='f$i' value='$c/$pn' />
@@ -221,7 +299,7 @@
                     (is_dir ("$c/$pn"))? 1 : 2,
                     (is_dir ("$c/$pn"))? "tree" : "editor",
                     (is_dir ("$c/$pn")?
-                        'background-color:maroon;padding:3px;color:white;':
+                        'background-color:' . HEADER_COLOR . ';padding:3px;color:white;':
                         ''),
                     @filesize ("$c/$pn"),
                     @fileperm ("$c/$pn"));
@@ -296,7 +374,8 @@
                     mkdir(p1), mkfile(p1), mv(p1,p2), 
                     rename(p1,p2), rmdir(p1), touch(p1)</p>
                 <hr />
-                <p><b>&copy; 2010 Sparta File Manager V " . THINC_BROWSER_VERSION . "</b><br />
+                <p><b>&copy; 2011 Sparta File Manager V " . THINC_BROWSER_VERSION . "</b><br />
+                   <a href='http://ohai.ca'>Brian Lai</a><br />
                    php version $phv<br />
                    cwd: " . getcwd() . "<br />
                    disk $dpf% free</p>
@@ -328,28 +407,10 @@
                 }  
             } 
 
-            $fh = @fopen ("$c/$f", 'r') or die();
+            $fh = @fopen ("$c/$f", 'r') or die('Failed to read file.');
             $p = @fread ($fh, filesize("$c/$f")); //the @ is required because fread complains about a 0-len read
             fclose ($fh);
-            /*echo("  <body>
-                        <form method='post'>
-                            <textarea class='php editor' 
-                                      name='p' 
-                                      id='p'
-                                      style='width:100%;height:100%;'>" . 
-                                str_rot13($p) . "</textarea>
-                            <input type='hidden' name='cwd' value='$c' />
-                            <input type='hidden' name='file' value='$f' />
-                            <input type='hidden' name='mode' value='2' />
-                            <input type='submit' value='Save' /> $c/$f
-                        </form>
-                        <script>
-                            document.getElementById('p').value = 
-                                rot13(document.getElementById('p').value);
-                            parent.tree.location.reload();
-                        </script>
-                    </body>
-                </html>");*/
+            
             echo("  <body style='overflow: hidden;'>
                         <form method='post'>
                             <textarea class='php editor' 
@@ -502,6 +563,57 @@
         $cf = basename ($_SERVER['SCRIPT_FILENAME']);
         $pf = 'http://' . $_SERVER['SERVER_NAME'];
         header ("location: $pf/$cf?cwd=$c&file=$f&mode=1");
+?>
+<?php
+    break; case 8:
+        // login window to set login cookies
+        // if no cookie is set, all modes will redirect here.
+        echo ("<html>
+                    <head><style type='text/css'>
+                        input {border: 1px solid silver;padding:5px;}
+                    </style></head>
+                    <body style='background-color:#eee;font-family:sans-serif;
+                                 line-height:1.5em;font-size:0.8em;'>
+                        <div style='background-color:#fff;position:fixed;
+                                    left:50%;top:50%;width:250px;margin-left:-125px;
+                                    height:150px;margin-top:-75px;text-align:center;
+                                    padding:20px;border:1px solid silver;'>
+                            <form method='post'>
+                                <label for='username'>User name: </label><br />
+                                <input id='username' name='username' type='text' /><br />
+                                <label for='password'>Password: </label><br />
+                                <input id='password' name='password' type='password' /><br />
+                                <br />
+                                <input type='submit' value='Log in' />
+                            </form>
+                        </div>
+                    </body>
+                </html>");
+?>
+<?php
+    break; case 9:
+        // ajax file upload
+        if ($f) { // if I need to open/save a file then show...
+            if (isset($_POST['p'])) { // save?
+                $p=$_POST['p'];
+               
+                $pr = false; 
+                //pretend this is a backup
+                if (BACKUP_BEFORE_SAVING) {
+                    $pcd = date('ymd');
+                    $pr = @copy ("$c/$f","$c/$f.b$pcd.bak");
+                }
+                
+                if ($pr == BACKUP_BEFORE_SAVING) {
+                    $fh = @fopen("$c/$f", 'w') or die();
+                    @fwrite ($fh, stripslashes($p));
+                    fclose ($fh);
+                    echo ("Saved.");
+                } else {
+                    echo ("Failed to save $c/$f !");
+                }  
+            } 
+        }
 ?>
 <?php
     break; case 99:
