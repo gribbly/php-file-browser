@@ -240,8 +240,8 @@
         // frame
 ?>
         <frameset cols="300px,*">
-            <frame name="tree" src="?mode=1" />
-            <frame name="editor" src="?mode=2" />
+            <frame name="tree" src="<?php echo ("?mode=1"); ?>" />
+            <frame name="editor" src="<?php echo ("?mode=2"); ?>" />
         </frameset><noframes></noframes>
 <?php
     break; case 1:
